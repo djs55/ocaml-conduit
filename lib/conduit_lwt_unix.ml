@@ -167,11 +167,9 @@ let init ?src ?(tls_server_key=`None) () =
 module Sockaddr_client = struct
   let connect ?src sa =
     Conduit_lwt_server.with_socket sa (fun fd ->
-        let () =
-          match src with
-          | None -> ()
-          | Some src_sa -> Lwt_unix.bind fd src_sa
-        in
+        ( match src with
+          | None -> Lwt.return_unit
+          | Some src_sa -> Lwt_unix.Versioned.bind_2 fd src_sa ) >>= fun () ->
         Lwt_unix.connect fd sa >>= fun () ->
         let ic = Lwt_io.of_fd ~mode:Lwt_io.input fd in
         let oc = Lwt_io.of_fd ~mode:Lwt_io.output fd in
@@ -195,10 +193,10 @@ module Sockaddr_server = struct
     Lwt.pick events >>= (fun () -> Conduit_lwt_server.close (ic,oc))
 
   let init ~on ?stop ?backlog ?timeout callback =
-    let s =
-      match on with
-      | `Socket s -> s
-      | `Sockaddr sockaddr -> Conduit_lwt_server.listen ?backlog sockaddr in
+    ( match on with
+      | `Socket s -> Lwt.return s
+      | `Sockaddr sockaddr -> Conduit_lwt_server.listen ?backlog sockaddr )
+    >>= fun s ->
     Conduit_lwt_server.init ?stop (process_accept ?timeout callback) s
 end
 
